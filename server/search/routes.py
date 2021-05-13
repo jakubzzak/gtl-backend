@@ -1,9 +1,9 @@
-from flask import request, Blueprint, Response, json
+from flask import request, Blueprint, Response
 from server.config import CustomResponse
 from functools import reduce
 
 
-search = Blueprint('search', __name__)
+search = Blueprint('search', __name__, url_prefix='/search')
 
 groups = ['EVERYTHING', 'BOOK', 'ARTICLE', 'JOURNAL', 'MAP']
 
@@ -23,8 +23,9 @@ class SearchRequest:
                and reduce((lambda x, y: x and y in searchable_columns), self.columns)
 
 
-@search.route("/search", methods=['POST'])
-def search_in_catalog():
+@search.route("/", methods=['POST'])
+@search.route("", methods=['POST'])
+def search_in_catalog() -> Response:
     req = SearchRequest(**request.json)
     res = CustomResponse(data=[])
     if req.is_valid():

@@ -23,11 +23,13 @@ def create_app(config_class=Config):
     mail.init_app(app)
 
     from server.search.routes import search
+    from server.book.routes import books
     from server.customers.routes import customers
     from server.users.routes import users
     from server.main.routes import main
 
     app.register_blueprint(search)
+    app.register_blueprint(books)
     app.register_blueprint(customers)
     app.register_blueprint(users)
     app.register_blueprint(main)

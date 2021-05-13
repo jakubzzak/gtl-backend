@@ -1,12 +1,13 @@
-from flask import render_template, url_for, flash, redirect, request, Blueprint
+from flask import url_for, flash, redirect, request, Blueprint, Response
 from flask_login import login_user, current_user, logout_user, login_required
+from server.config import CustomResponse
 from bcrypt import checkpw
 
-users = Blueprint('users', __name__)
+users = Blueprint('users', __name__, url_prefix='/api/user')
 
 
-@users.route("/users/login", methods=['POST'])
-def login():
+@users.route("/login", methods=['POST'])
+def login() -> Response:
     if current_user.is_authenticated:
         return redirect(url_for('main_old.home'))
 
@@ -20,8 +21,9 @@ def login():
 
 
 
-@users.route("/users/logout")
+@users.route("/logout")
 @login_required
-def logout():
+def logout() -> Response:
+    res = CustomResponse()
     logout_user()
-    return redirect(url_for('main_old.home'))
+    return res.get_response()

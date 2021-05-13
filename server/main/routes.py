@@ -1,15 +1,12 @@
-from flask import render_template, request, Blueprint
+from flask import request, Blueprint, Response
+from server.config import CustomResponse
 
 
-main = Blueprint('main', __name__)
+main = Blueprint('main', __name__, url_prefix='/api/library')
 
 
-@main.route("/")
-@main.route("/home")
-def home():
-    return 'home page'
-
-
-@main.route("/about")
-def about():
-    return 'about page'
+@main.route('/wishlist/add', methods=['PUT'])
+def add_item_to_library_wishlist() -> Response:
+    res = CustomResponse()
+    res.set_data(request.json)
+    return res.get_response()

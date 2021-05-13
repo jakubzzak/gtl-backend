@@ -1,28 +1,39 @@
-from flask import request, Blueprint
+from flask import request, Blueprint, Response
+from server.config import CustomResponse
 
-book = Blueprint('book', __name__)
-
-
-@book.route("/book/<uuid:id>")
-def get_book(id: str):
-    return id
+books = Blueprint('books', __name__, url_prefix='/api/book')
 
 
-@book.route("/book/create", methods=['PUT'])
-def create_book():
-    return request.json
+@books.route("/<uuid:id>")
+def get_book(id: str) -> Response:
+    res = CustomResponse()
+    res.set_data({'id': id})
+    return res.get_response()
 
 
-@book.route("/book/<uuid:id>/update", methods=['POST'])
-def update_book(id: str):
-    return request.json
+@books.route("/create", methods=['PUT'])
+def create_book() -> Response:
+    res = CustomResponse()
+    res.set_data(request.json)
+    return res.get_response()
 
 
-@book.route("/book/<uuid:id>/stock", methods=['POST'])
-def update_book_stock(id: str):
-    return request.json
+@books.route("/<uuid:id>/update", methods=['POST'])
+def update_book(id: str) -> Response:
+    res = CustomResponse()
+    res.set_data({'id': id})
+    return res.get_response()
 
 
-@book.route("/book/<uuid:id>/disable", methods=['DELETE'])
-def disable_book(id: str):
-    return id
+@books.route("/<uuid:id>/stock", methods=['POST'])
+def update_book_stock(id: str) -> Response:
+    res = CustomResponse()
+    res.set_data({'id': id})
+    return res.get_response()
+
+
+@books.route("/<uuid:id>/disable", methods=['DELETE'])
+def disable_book(id: str) -> Response:
+    res = CustomResponse()
+    res.set_data({'id': id})
+    return res.get_response()
