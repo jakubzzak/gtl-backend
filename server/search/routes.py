@@ -1,15 +1,13 @@
 from flask import request, Blueprint, Response
 from sqlalchemy.sql import text
 from server.config import CustomResponse, InvalidRequestException
-from server import db \
-    # , db_base
-from server.models_old import Book
+from server import db
+from server.models import Book
 from functools import reduce
 
 search = Blueprint('search', __name__, url_prefix='/search')
 
 groups = ['EVERYTHING', 'BOOK', 'ARTICLE', 'JOURNAL', 'MAP']
-
 searchable_columns = ['TITLE', 'AUTHOR', 'AREA']
 
 
@@ -36,7 +34,6 @@ def search_in_catalog() -> Response:
         if not req.is_valid():
             raise InvalidRequestException
         with db.engine.connect() as con:
-            # statement = text("""SELECT * FROM book WHERE resource_type<>:group""")
             statement = text("""SELECT top 3 * FROM book WHERE resource_type=:group""")
             rs = con.execute(statement, {'group': req.group})
             data = []

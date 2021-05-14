@@ -1,80 +1,113 @@
-from datetime import datetime
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from flask import current_app
-from sqlalchemy import Column, String, Text, SmallInteger, Integer, Date, DateTime, Boolean, ForeignKey
-from sqlalchemy.orm import relationship, declarative_base
-from server import db, db_base, login_manager
 from flask_login import UserMixin
+from itsdangerous import Serializer
+from datetime import datetime
+from sqlalchemy import Table, Column, String, Text, Integer, Boolean, ForeignKey, SmallInteger, DateTime, Date
+from sqlalchemy.orm import relationship, declarative_base
 
 
 Base = declarative_base()
 
-# class UserModel(db.Model, UserMixin):
-#     id = Column(Integer, primary_key=True)
-#     username = Column(String(20), unique=True, nullable=False)
-#     email = Column(String(120), unique=True, nullable=False)
-#     image_file = Column(String(20), nullable=False, default='default.jpg')
-#     password = Column(String(60), nullable=False)
-#     posts = relationship('Post', backref='author', lazy=True)
-#
-#     def __repr__(self):
-#         return f"User('{self.username}', '{self.email}', '{self.image_file}')"
-#
-#
-# class Post(db.Model):
-#     id = Column(Integer, primary_key=True)
-#     title = Column(String(100), nullable=False)
-#     date_posted = Column(DateTime, nullable=False, default=datetime.utcnow)
-#     content = Column(Text, nullable=False)
-#     user_id = Column(Integer, ForeignKey('user_old.id'), nullable=False)
-#
-#     def __repr__(self):
-#         return f"Post('{self.title}', '{self.date_posted}')"
+
+class Book(Base):
+    __table__ = Table(
+        'book',
+        Base.metadata,
+        Column('isbn', String(30), primary_key=True),
+        Column('title', String(150), nullable=False),
+        Column('author', String(100), nullable=False),
+        Column('subject_area', String(100), nullable=False),
+        Column('description', Text),
+        Column('is_loanable', Boolean, nullable=False, default=True),
+        Column('total_copies', Integer, nullable=False),
+        Column('available_copies', Integer, nullable=False),
+        Column('resource_type', String(30), nullable=False),
+    )
+
+    def __init__(self, isbn: str, title: str, author: str, subject_area: str, description: str, is_loanable: bool,
+                 total_copies: int, available_copies: int, resource_type: str):
+        self.isbn = isbn
+        self.title = title
+        self.author = author
+        self.subject_area = subject_area
+        self.description = description
+        self.is_loanable = is_loanable
+        self.total_copies = total_copies
+        self.available_copies = available_copies
+        self.resource_type = resource_type
+
+    @staticmethod
+    def jsonify(o: any) -> dict:
+        temp = o.__dict__
+        del temp['_sa_instance_state']
+        return temp
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'isbn': self.isbn,
+            'title': self.title,
+            'author': self.author,
+            'subject_area': self.subject_area,
+            'description': self.description,
+            'available_copies': self.available_copies,
+            'is_loanable': self.is_loanable
+        }
+
+    def __repr__(self):
+        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
 
 
-class Address(db_base):
-    __tablename__ = 'address'
-    # __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    street = Column(String(150))
-    number = Column(String(50))
-    city = Column(String(100), nullable=False)
-    post_code = Column(String(20), nullable=False)
-    country = Column(String(100), nullable=False)
-
-    campus = relationship('Campus')
+class Address(Base):
+    __table__ = Table(
+        'address',
+        Base.metadata,
+        Column('id', Integer, primary_key=True, autoincrement=True),
+        Column('street', String(150)),
+        Column('number', String(50)),
+        Column('city', String(100), nullable=False),
+        Column('post_code', String(20), nullable=False),
+        Column('country', String(100), nullable=False),
+    )
 
     def __repr__(self):
         return f"Address({self.street} {self.author}, {self.post_code} {self.city}, {self.country})"
 
 
-class Campus(db_base):
-    __tablename__ = 'campus'
-    __table_args__ = {'extend_existing': True}
+class Campus(Base):
+    __table__ = Table(
+        'campus',
+        Base.metadata,
+        Column('address_id', Integer, ForeignKey('address.id'), primary_key=True),
+    )
 
-    address_id = Column(Integer, ForeignKey('address.id'), primary_key=True)
-    # address = relationship('Address', backref='id', lazy=True)
+    address = relationship('Address')
 
     def __repr__(self):
-        return f"Address({self.street} {self.author}, {self.post_code} {self.city}', {self.country}')"
+        return f"Campus(address={self.address})"
 
 
-class CustomerModel(db.Model, UserMixin):
-    id = Column(String, primary_key=True)
-    ssn = Column(String(20), nullable=False, unique=True)
-    email = Column(String(100), nullable=False, unique=True)
-    password = Column(String(60), nullable=False)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
-    campus_id = Column(Integer, ForeignKey('campus.address_id'), nullable=False)
-    type = Column(String(20), nullable=False)
-    home_address_id = Column(Integer, ForeignKey('address.id'))
-    can_reserve = Column(Boolean, default=True, nullable=False)
-    can_borrow = Column(Boolean, default=True, nullable=False)
-    books_borrowed = Column(SmallInteger, default=0, nullable=False)
-    books_reserved = Column(SmallInteger, default=0, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
+class Customer(Base, UserMixin):
+    __table__ = Table(
+        'customer',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('ssn', String(20), nullable=False, unique=True),
+        Column('email', String(100), nullable=False, unique=True),
+        Column('password', String(60), nullable=False),
+        Column('first_name', String(100), nullable=False),
+        Column('last_name', String(100), nullable=False),
+        Column('campus_id', Integer, ForeignKey('campus.address_id'), nullable=False),
+        Column('type', String(20), nullable=False),
+        Column('home_address_id', Integer, ForeignKey('address.id')),
+        Column('can_reserve', Boolean, default=True, nullable=False),
+        Column('can_borrow', Boolean, default=True, nullable=False),
+        Column('books_borrowed', SmallInteger, default=0, nullable=False),
+        Column('books_reserved', SmallInteger, default=0, nullable=False),
+        Column('is_active', Boolean, default=True, nullable=False),
+    )
+
+    wishlist_items = relationship('CustomerWishlistItem', lazy=True)
+    phone_numbers = relationship('PhoneNumber', lazy=True)
 
     @staticmethod
     def verify_reset_token(token):
@@ -83,7 +116,7 @@ class CustomerModel(db.Model, UserMixin):
             user_id = s.loads(token)['user_id']
         except:
             return None
-        return CustomerModel.query.get(user_id)
+        return Customer.query.get(user_id)
 
     def get_reset_token(self, expires_sec=3600):
         s = Serializer(current_app.config['CUSTOMER_SECRET_KEY'], expires_sec)
@@ -93,43 +126,62 @@ class CustomerModel(db.Model, UserMixin):
         return f"Customer({self.first_name} {self.last_name} ({self.email}), borrowed: {self.books_borrowed}, reserved: {self.books_reserved})"
 
 
-class CustomerWishlistItemModel(db.Model):
-    id = Column(String, primary_key=True)
-    customer_ssn = Column(String, ForeignKey('customer.ssn'), nullable=False)
-    book_isbn = Column(String, ForeignKey('book.isbn'), nullable=False)
-    requested_at = Column(DateTime)
-    picked_up = Column(Boolean, default=False, nullable=False)
+class CustomerWishlistItem(Base):
+    __table__ = Table(
+        'customer_wishlist_item',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('customer_ssn', String, ForeignKey('customer.ssn'), nullable=False),
+        Column('book_isbn', String, ForeignKey('book.isbn'), nullable=False),
+        Column('requested_at', DateTime),
+        Column('picked_up', Boolean, default=False, nullable=False),
+    )
 
     def __repr__(self):
         return f"Customer wishlist item(customer={self.customer_ssn}, book={self.book_isbn}, requested_at={self.requested_at}, picked_up={self.picked_up})"
 
 
-class Book(db_base):
-    __tablename__ = 'book'
-    __table_args__ = {'extend_existing': True}
-
-    isbn = Column(String(30), primary_key=True)
-    title = Column(String(150), nullable=False)
-    author = Column(String(100), nullable=False)
-    subject_area = Column(String(100), nullable=False)
-    description = Column(Text)
-    is_loanable = Column(Boolean, nullable=False, default=True)
-    total_copies = Column(Integer, nullable=False)
-    available_copies = Column(Integer, nullable=False)
-    resource_type = Column(String(30), nullable=False)
+class PhoneNumber(Base):
+    __table__ = Table(
+        'phone_number',
+        Base.metadata,
+        Column('customer_ssn', String, ForeignKey('customer.ssn'), primary_key=True),
+        Column('country_code', String(5), primary_key=True),
+        Column('number', String(15), primary_key=True),
+        Column('type', String(30), nullable=False),
+    )
 
     def __repr__(self):
-        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
+        return f"Phone number(+{self.country_code} {self.number}, {self.type})"
 
 
-class LibrarianModel(db.Model, UserMixin):
-    id = Column(String, primary_key=True)
-    ssn = Column(String(20), nullable=False, unique=True)
-    email = Column(String(100), nullable=False, unique=True)
-    password = Column(String(60), nullable=False)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
-    position = Column(String(30), nullable=False)
+class Card(Base):
+    __table__ = Table(
+        'card',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('customer_ssn', String, ForeignKey('customer.ssn'), nullable=False),
+        Column('expiration_date', Date, nullable=False),
+        Column('photo_path', String(150), nullable=False),
+        Column('is_active', Boolean, default=True, nullable=False),
+    )
+
+    def __repr__(self):
+        return f"Card({self.country_code} {self.number}, {self.type})"
+
+
+class Librarian(Base, UserMixin):
+    __table__ = Table(
+        'librarian',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('ssn', String(20), nullable=False, unique=True),
+        Column('email', String(100), nullable=False, unique=True),
+        Column('password', String(60), nullable=False),
+        Column('first_name', String(100), nullable=False),
+        Column('last_name', String(100), nullable=False),
+        Column('position', String(30), nullable=False),
+    )
 
     @staticmethod
     def verify_reset_token(token):
@@ -138,7 +190,7 @@ class LibrarianModel(db.Model, UserMixin):
             user_id = s.loads(token)['user_id']
         except:
             return None
-        return LibrarianModel.query.get(user_id)
+        return Librarian.query.get(user_id)
 
     def get_reset_token(self, expires_sec=3600):
         s = Serializer(current_app.config['SECRET_KEY'], expires_sec)
@@ -148,51 +200,34 @@ class LibrarianModel(db.Model, UserMixin):
         return f"Librarian({self.first_name} {self.last_name} ({self.email}), {self.position})"
 
 
-class LibrarianWishlistItemModel(db.Model):
-    id = Column(String, primary_key=True)
-    title = Column(String(100), nullable=False)
-    description = Column(Text)
+class LibrarianWishlistItem(Base):
+    __table__ = Table(
+        'librarian_wishlist_item',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('title', String(100), nullable=False),
+        Column('description', Text),
+    )
 
     def __repr__(self):
         return f"Librarian wishlist item(title={self.title}, description={self.description})"
 
 
-class PhoneNumberModel(db.Model):
-    customer_ssn = Column(String, ForeignKey('customer.ssn'), primary_key=True)
-    country_code = Column(String(5), primary_key=True)
-    number = Column(String(15), primary_key=True)
-    type = Column(String(30), nullable=False)
+class Loan(Base):
+    __table__ = Table(
+        'loan',
+        Base.metadata,
+        Column('id', String, primary_key=True),
+        Column('book_isbn', String(30), ForeignKey('book.isbn'), nullable=False),
+        Column('customer_ssn', String(20), ForeignKey('customer.ssn'), nullable=False, index=True),
+        Column('issued_by', String, ForeignKey('librarian.ssn'), nullable=False),
+        Column('loaned_at', DateTime, default=datetime.utcnow, nullable=False, index=True),
+        Column('returned_at', DateTime),
+    )
 
-    def __repr__(self):
-        return f"Phone number(+{self.country_code} {self.number}, {self.type})"
-
-
-class CardModel(db.Model):
-    id = Column(String, primary_key=True)
-    customer_ssn = Column(String, ForeignKey('customer.ssn'), nullable=False)
-    expiration_date = Column(Date, nullable=False)
-    photo_path = Column(String(150), nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-
-    def __repr__(self):
-        return f"Card({self.country_code} {self.number}, {self.type})"
-
-
-class Loan(db.Model):
-    id = Column(String, primary_key=True)
-    book_isbn = Column(String(30), ForeignKey('book.isbn'), nullable=False)
-    customer_ssn = Column(String(20), ForeignKey('customer.ssn'), nullable=False, index=True)
-    issued_by = Column(String, ForeignKey('librarian.ssn'), nullable=False)
-    loaned_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    returned_at = Column(DateTime)
+    book = relationship('Book', lazy=True)
+    customer = relationship('Customer', lazy=True)
+    librarian = relationship('Librarian', lazy=True)
 
     def __repr__(self):
         return f"Loan(book='{self.book_isbn}' customer='{self.customer_ssn}' ({self.loaned_at} - {self.returned_at})"
-
-
-@login_manager.user_loader
-def load_customer(user_id: int) -> CustomerModel:
-    return CustomerModel.query.get(int(user_id))
-
-
-db_base.prepare()

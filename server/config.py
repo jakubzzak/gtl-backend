@@ -45,3 +45,9 @@ class InvalidRequestException(Exception):
 
     def __init__(self, message='Invalid request!'):
         self.message = message
+
+
+class RecordNotFound(Exception):
+
+    def __init__(self, value):
+        self.message = f"Record with value {value} does not exist!"
