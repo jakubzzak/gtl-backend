@@ -1,5 +1,9 @@
+from dotenv import load_dotenv
 import os
 from flask import Response, json
+
+
+load_dotenv()
 
 
 class Config:
@@ -35,3 +39,9 @@ class CustomResponse:
     def get_response(self, status: int = None) -> Response:
         return Response(json.dumps({"ok": self.ok, "data": self.data, "error": self.error}),
                         status=status if status is not None else 200 if self.ok else 406, mimetype='application/json')
+
+
+class InvalidRequestException(Exception):
+
+    def __init__(self, message='Invalid request!'):
+        self.message = message

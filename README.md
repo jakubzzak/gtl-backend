@@ -25,9 +25,7 @@ If adding new dependency, run the following command to add the dependency to the
 
 ### .env
 
-.env file is only a template of environment variables that the server uses, 
-thus you need to create .env.local file where you can freely fill all information
-without exposing them
+create your local .env file in the same directory as config.py and add all required values that Config class is expecting to receive
 
 
 ### run
