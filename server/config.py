@@ -14,6 +14,7 @@ class Config:
     MAIL_USE_TLS = True
     MAIL_USERNAME = os.environ.get('EMAIL_USER')
     MAIL_PASSWORD = os.environ.get('EMAIL_PASS')
+    UNHANDLED_EXCEPTION_MESSAGE = os.environ.get('') if os.environ.get('UNHANDLED_EXCEPTION_MESSAGE') is not None else 'Ups! Unhandled exception occurred.'
 
 
 class CustomResponse:
@@ -49,5 +50,5 @@ class InvalidRequestException(Exception):
 
 class RecordNotFound(Exception):
 
-    def __init__(self, value):
-        self.message = f"Record with value {value} does not exist!"
+    def __init__(self, value: str = None):
+        self.message = f"Record with value {value} does not exist!" if value is not None else f"Record does not exist!"

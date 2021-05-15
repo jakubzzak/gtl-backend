@@ -4,6 +4,7 @@ from itsdangerous import Serializer
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Text, Integer, Boolean, ForeignKey, SmallInteger, DateTime, Date
 from sqlalchemy.orm import relationship, declarative_base
+from server.config import InvalidRequestException
 
 
 Base = declarative_base()
@@ -18,14 +19,20 @@ class Book(Base):
         Column('author', String(100), nullable=False),
         Column('subject_area', String(100), nullable=False),
         Column('description', Text),
-        Column('is_loanable', Boolean, nullable=False, default=True),
+        Column('is_loanable', Boolean, default=True, nullable=False),
         Column('total_copies', Integer, nullable=False),
         Column('available_copies', Integer, nullable=False),
         Column('resource_type', String(30), nullable=False),
+        Column('active', Boolean, default=True, nullable=False),
     )
 
-    def __init__(self, isbn: str, title: str, author: str, subject_area: str, description: str, is_loanable: bool,
-                 total_copies: int, available_copies: int, resource_type: str):
+    def __init__(self, isbn: str = None, title: str = None, author: str = None, subject_area: str = None,
+                 description: str = None, is_loanable: bool = True, total_copies: int = 0,
+                 available_copies: int = 0, resource_type: str = None, active: bool = True, **other):
+        if len(other) > 0 or isbn is None or title is None or author is None \
+                or subject_area is None or resource_type is None:
+            raise InvalidRequestException
+
         self.isbn = isbn
         self.title = title
         self.author = author
@@ -35,12 +42,16 @@ class Book(Base):
         self.total_copies = total_copies
         self.available_copies = available_copies
         self.resource_type = resource_type
+        self.active = active
 
-    @staticmethod
-    def jsonify(o: any) -> dict:
-        temp = o.__dict__
-        del temp['_sa_instance_state']
-        return temp
+    def __repr__(self):
+        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
+
+    # @staticmethod
+    # def jsonify(o: any) -> dict:
+    #     temp = o.__dict__
+    #     del temp['_sa_instance_state']
+    #     return temp
 
     def get_relaxed_view(self) -> dict:
         return {
@@ -53,8 +64,44 @@ class Book(Base):
             'is_loanable': self.is_loanable
         }
 
-    def __repr__(self):
-        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
+    def update_record(self, title: str = None, author: str = None, subject_area: str = None,
+                      description: str = None, is_loanable: bool = None, total_copies: int = None,
+                      available_copies: int = None, resource_type: str = None, **other) -> dict:
+        if len(other) > 0:
+            raise InvalidRequestException
+
+        if title is not None:
+            self.title = title
+        if author is not None:
+            self.author = author
+        if subject_area is not None:
+            self.subject_area = subject_area
+        if description is not None:
+            self.description = description
+        if is_loanable is not None:
+            self.is_loanable = is_loanable
+        if total_copies is not None:
+            self.total_copies = total_copies
+        if available_copies is not None:
+            self.available_copies = available_copies
+        if resource_type is not None:
+            self.resource_type = resource_type
+
+        return self.get_relaxed_view()
+
+    def update_stock(self, total_copies: int = None, available_copies: int = None, **other) -> dict:
+        if len(other) > 0:
+            raise InvalidRequestException
+
+        if total_copies is not None:
+            self.total_copies = total_copies
+        if available_copies is not None:
+            self.available_copies = available_copies
+
+        return self.get_relaxed_view()
+
+    def remove_from_catalog(self) -> None:
+        self.active = False
 
 
 class Address(Base):

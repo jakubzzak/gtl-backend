@@ -1,6 +1,8 @@
 from flask import request, Blueprint, Response
 from server.config import CustomResponse, InvalidRequestException, RecordNotFound
 from server import db
+from server.config import Config
+from sqlalchemy.exc import IntegrityError
 from server.models import Book
 
 
@@ -23,26 +25,73 @@ def get_book(isbn: str) -> Response:
 @books.route("/create", methods=['PUT'])
 def create_book() -> Response:
     res = CustomResponse()
-    res.set_data(request.json)
+    try:
+        book = Book(**request.json)
+        db.session.add(book)
+        db.session.commit()
+        res.set_data(book.get_relaxed_view())
+        return res.get_response(201)
+    except IntegrityError:
+        db.session.rollback()
+        res.set_error(f"Item you are trying to add already exists!")
+    except InvalidRequestException as e:
+        db.session.rollback()
+        res.set_error(e.message)
     return res.get_response()
 
 
 @books.route("/<isbn>/update", methods=['POST'])
 def update_book(isbn: str) -> Response:
     res = CustomResponse()
-    res.set_data({'id': isbn})
+    try:
+        book = db.session.query(Book).get(isbn)
+        if book is None:
+            raise RecordNotFound(isbn)
+        book.update_record(**request.json)
+        db.session.commit()
+        res.set_data(book.get_relaxed_view())
+    except InvalidRequestException or RecordNotFound as e:
+        db.session.rollback()
+        res.set_error(e.message)
+    except IntegrityError:
+        db.session.rollback()
+        res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
     return res.get_response()
 
 
 @books.route("/<isbn>/stock", methods=['POST'])
 def update_book_stock(isbn: str) -> Response:
     res = CustomResponse()
-    res.set_data({'id': isbn})
+    try:
+        book = db.session.query(Book).get(isbn)
+        if book is None:
+            raise RecordNotFound(isbn)
+        book.update_stock(**request.json)
+        db.session.commit()
+        res.set_data(book.get_relaxed_view())
+    except InvalidRequestException or RecordNotFound as e:
+        db.session.rollback()
+        res.set_error(e.message)
+    except IntegrityError:
+        db.session.rollback()
+        res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
     return res.get_response()
 
 
 @books.route("/<isbn>/disable", methods=['DELETE'])
 def disable_book(isbn: str) -> Response:
     res = CustomResponse()
-    res.set_data({'id': isbn})
+    try:
+        book = db.session.query(Book).get(isbn)
+        if book is None:
+            raise RecordNotFound(isbn)
+        book.remove_from_catalog()
+        db.session.commit()
+        res.set_data({'id': isbn})
+    except RecordNotFound as e:
+        db.session.rollback()
+        res.set_error(e.message)
+    except IntegrityError:
+        db.session.rollback()
+        res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
     return res.get_response()
