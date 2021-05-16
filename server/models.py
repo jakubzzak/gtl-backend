@@ -119,6 +119,16 @@ class Address(Base):
     def __repr__(self):
         return f"Address({self.street} {self.author}, {self.post_code} {self.city}, {self.country})"
 
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'street': self.street,
+            'number': self.number,
+            'city': self.city,
+            'post_code': self.post_code,
+            'country': self.country
+        }
+
 
 class Campus(Base):
     __table__ = Table(
@@ -132,13 +142,17 @@ class Campus(Base):
     def __repr__(self):
         return f"Campus(address={self.address})"
 
+    def get_relaxed_view(self) -> dict:
+        return {
+            'address': self.address.get_relaxed_view()
+        }
+
 
 class Customer(Base, UserMixin):
     __table__ = Table(
         'customer',
         Base.metadata,
-        Column('id', String, primary_key=True),
-        Column('ssn', String(20), nullable=False, unique=True),
+        Column('ssn', String(20), primary_key=True),
         Column('email', String(100), nullable=False, unique=True),
         Column('password', String(60), nullable=False),
         Column('first_name', String(100), nullable=False),
@@ -153,8 +167,36 @@ class Customer(Base, UserMixin):
         Column('is_active', Boolean, default=True, nullable=False),
     )
 
+    card = relationship('Card', lazy=True)
+    campus = relationship('Campus', lazy=True)
+    address = relationship('Address', lazy=True)
     wishlist_items = relationship('CustomerWishlistItem', lazy=True)
     phone_numbers = relationship('PhoneNumber', lazy=True)
+
+    def __init__(self, ssn: str = None, email: str = None, pw_hash: str = None, first_name: str = None,
+                 last_name: str = None, campus_id: int = None, type: str = 'STUDENT', home_address_id: int = None,
+                 can_borrow: bool = True, can_reserve: bool = True, books_borrowed: int = 0, books_reserved: int = 0,
+                 is_active: bool = True, **other):
+        if len(other) > 0 or ssn is None or email is None or pw_hash is None \
+                or first_name is None or last_name is None or campus_id is None or home_address_id is None:
+            raise InvalidRequestException
+
+        self.ssn = ssn
+        self.email = email
+        self.pw_hash = pw_hash
+        self.first_name = first_name
+        self.last_name = last_name
+        self.campus_id = campus_id
+        self.type = type
+        self.home_address_id = home_address_id
+        self.can_borrow = can_borrow
+        self.can_reserve = can_reserve
+        self.books_borrowed = books_borrowed
+        self.books_reserved = books_reserved
+        self.is_active = is_active
+
+    def __repr__(self):
+        return f"Customer({self.first_name} {self.last_name} ({self.email}), borrowed: {self.books_borrowed}, reserved: {self.books_reserved})"
 
     @staticmethod
     def verify_reset_token(token):
@@ -169,8 +211,22 @@ class Customer(Base, UserMixin):
         s = Serializer(current_app.config['CUSTOMER_SECRET_KEY'], expires_sec)
         return s.dumps({'user_id': self.id}).decode('utf-8')
 
-    def __repr__(self):
-        return f"Customer({self.first_name} {self.last_name} ({self.email}), borrowed: {self.books_borrowed}, reserved: {self.books_reserved})"
+    def get_relaxed_view(self) -> dict:
+        return {
+            'ssn': self.ssn,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'type': self.type,
+            'card': list(filter(lambda card: card.is_active, self.card))[0].get_relaxed_view(),
+            'campus': self.campus.get_relaxed_view(),
+            'address': self.address.get_relaxed_view(),
+            'phone_numbers': [phone_number.get_relaxed_view() for phone_number in self.phone_numbers],
+            'wishlist': [wishlist_item.get_relaxed_view() for wishlist_item in self.wishlist_items],
+            'can_borrow': self.can_borrow,
+            'can_reserve': self.can_reserve,
+            'is_active': self.is_active
+        }
 
 
 class CustomerWishlistItem(Base):
@@ -187,6 +243,14 @@ class CustomerWishlistItem(Base):
     def __repr__(self):
         return f"Customer wishlist item(customer={self.customer_ssn}, book={self.book_isbn}, requested_at={self.requested_at}, picked_up={self.picked_up})"
 
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'isbn': self.book_isbn,
+            'requested_at': self.requested_at,
+            'picked_up': self.picked_up,
+        }
+
 
 class PhoneNumber(Base):
     __table__ = Table(
@@ -201,6 +265,13 @@ class PhoneNumber(Base):
     def __repr__(self):
         return f"Phone number(+{self.country_code} {self.number}, {self.type})"
 
+    def get_relaxed_view(self) -> dict:
+        return {
+            'country_code': self.country_code,
+            'number': self.number,
+            'type': self.type,
+        }
+
 
 class Card(Base):
     __table__ = Table(
@@ -213,8 +284,24 @@ class Card(Base):
         Column('is_active', Boolean, default=True, nullable=False),
     )
 
+    customer = relationship('Customer')
+
     def __repr__(self):
-        return f"Card({self.country_code} {self.number}, {self.type})"
+        return f"Card(ssn={self.customer_ssn} expires={self.expiration_date}, active={self.is_active})"
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'customer_ssn': self.customer_ssn,
+            'expiration_date': self.expiration_date,
+            'photo_path': self.photo_path,
+        }
+
+    def get_search_view(self):
+        return {
+            'card_id': self.id,
+            'full_name': f"{self.customer.first_name} {self.customer.last_name}"
+        }
 
 
 class Librarian(Base, UserMixin):

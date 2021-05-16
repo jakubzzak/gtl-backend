@@ -43,18 +43,34 @@ def search_in_catalog() -> Response:
         if not req.is_valid():
             raise InvalidRequestException
         with db.engine.connect() as con:
+            # statement = text(f"""
+            #             SELECT * FROM book
+            #             WHERE resource_type IN {"('" + req.groups[0] + "')" if len(req.groups) == 1 else tuple(req.groups)}
+            #                 AND
+            #                 (
+            #                 title LIKE '%{req.phrase + "%" if 'TITLE' in req.columns else ''}'
+            #                 OR
+            #                 author LIKE '%{req.phrase + "%" if 'AUTHOR' in req.columns else ''}'
+            #                 OR
+            #                 subject_area LIKE '%{req.phrase + "%" if 'AREA' in req.columns else ''}'
+            #                 )
+            #             ORDER BY isbn
+            #             OFFSET :offset ROWS
+            #             FETCH NEXT :limit ROW ONLY;
+            #             """)
             statement = text(f"""
-            SELECT * FROM book 
-            WHERE resource_type in {"('" + req.groups[0] + "')" if len(req.groups) == 1 else tuple(req.groups)} and
+            SELECT * FROM book
+            WHERE resource_type IN {"('" + req.groups[0] + "')" if len(req.groups) == 1 else tuple(req.groups)} 
+                AND
                 (
-                {"title like '%" + req.phrase + "%'" if 'TITLE' in req.columns else ''} 
-                {" or " if 'AUTHOR' in req.columns and 'TITLE' in req.columns else '' } 
-                {"author like '%" + req.phrase + "%'" if 'AUTHOR' in req.columns else ''} 
-                {" or " if 'AREA' in req.columns and len(req.columns) > 1 else '' } 
-                {"subject_area like '%" + req.phrase + "%'" if 'AREA' in req.columns else ''} 
+                {"title like '%" + req.phrase + "%'" if 'TITLE' in req.columns else ''}
+                {" or " if 'AUTHOR' in req.columns and 'TITLE' in req.columns else '' }
+                {"author like '%" + req.phrase + "%'" if 'AUTHOR' in req.columns else ''}
+                {" or " if 'AREA' in req.columns and len(req.columns) > 1 else '' }
+                {"subject_area like '%" + req.phrase + "%'" if 'AREA' in req.columns else ''}
                 )
-            ORDER BY isbn 
-            OFFSET :offset ROWS 
+            ORDER BY isbn
+            OFFSET :offset ROWS
             FETCH NEXT :limit ROW ONLY;
             """)
             rs = con.execute(statement, req.__dict__)
