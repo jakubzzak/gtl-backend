@@ -37,7 +37,7 @@ class CustomResponse:
         self.ok = False
 
     def __repr__(self):
-        return {'ok': self.ok, 'data': self.data, 'error': self.error}
+        return f"CustomResponse(ok={self.ok} data={self.data}, error={self.error})"
 
     def get_response(self, status: int = None) -> Response:
         return Response(json.dumps({"ok": self.ok, "data": self.data, "error": self.error}),

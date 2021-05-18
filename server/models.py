@@ -2,9 +2,13 @@ from flask import current_app
 from flask_login import UserMixin
 from itsdangerous import Serializer
 from datetime import datetime
-from sqlalchemy import Table, Column, String, Text, Integer, Boolean, ForeignKey, SmallInteger, DateTime, Date
+from sqlalchemy import Table, Column, String, Text, Integer, Boolean, ForeignKey, SmallInteger, DateTime, Date, \
+    FetchedValue
 from sqlalchemy.orm import relationship, declarative_base
 from server.config import InvalidRequestException
+from string import ascii_letters, digits
+from random import choice, randint
+from server import db
 
 
 Base = declarative_base()
@@ -23,14 +27,13 @@ class Book(Base):
         Column('total_copies', Integer, nullable=False),
         Column('available_copies', Integer, nullable=False),
         Column('resource_type', String(30), nullable=False),
-        Column('active', Boolean, default=True, nullable=False),
+        # Column('active', Boolean, default=True, nullable=False),
     )
 
     def __init__(self, isbn: str = None, title: str = None, author: str = None, subject_area: str = None,
                  description: str = None, is_loanable: bool = True, total_copies: int = 0,
-                 available_copies: int = 0, resource_type: str = None, active: bool = True, **other):
-        if len(other) > 0 or isbn is None or title is None or author is None \
-                or subject_area is None or resource_type is None:
+                 available_copies: int = 0, resource_type: str = 'BOOK', active: bool = True, **other: dict):
+        if len(other) > 0 or isbn is None or title is None or author is None or subject_area is None:
             raise InvalidRequestException
 
         self.isbn = isbn
@@ -38,20 +41,14 @@ class Book(Base):
         self.author = author
         self.subject_area = subject_area
         self.description = description
-        self.is_loanable = is_loanable
         self.total_copies = total_copies
         self.available_copies = available_copies
         self.resource_type = resource_type
-        self.active = active
+        self.is_loanable = is_loanable
+        # self.active = active
 
     def __repr__(self):
         return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
-
-    # @staticmethod
-    # def jsonify(o: any) -> dict:
-    #     temp = o.__dict__
-    #     del temp['_sa_instance_state']
-    #     return temp
 
     def get_relaxed_view(self) -> dict:
         return {
@@ -60,13 +57,22 @@ class Book(Base):
             'author': self.author,
             'subject_area': self.subject_area,
             'description': self.description,
+            'resource_type': self.resource_type,
+            'total_copies': self.total_copies,
             'available_copies': self.available_copies,
             'is_loanable': self.is_loanable
         }
 
+    def get_search_view(self):
+        return {
+            'isbn': self.isbn,
+            'title': self.title,
+            'author': self.author,
+        }
+
     def update_record(self, title: str = None, author: str = None, subject_area: str = None,
                       description: str = None, is_loanable: bool = None, total_copies: int = None,
-                      available_copies: int = None, resource_type: str = None, **other) -> dict:
+                      available_copies: int = None, resource_type: str = None, **other: dict) -> dict:
         if len(other) > 0:
             raise InvalidRequestException
 
@@ -89,7 +95,7 @@ class Book(Base):
 
         return self.get_relaxed_view()
 
-    def update_stock(self, total_copies: int = None, available_copies: int = None, **other) -> dict:
+    def update_stock(self, total_copies: int = None, available_copies: int = None, **other: dict) -> dict:
         if len(other) > 0:
             raise InvalidRequestException
 
@@ -116,12 +122,40 @@ class Address(Base):
         Column('country', String(100), nullable=False),
     )
 
+    def __init__(self, street: str = None, number: str = None, city: str = None,
+                 post_code: str = None, country: str = None, **other: dict):
+        if len(other) > 0 or city is None or post_code is None or country is None:
+            raise InvalidRequestException
+
+        self.street = street
+        self.number = number
+        self.city = city
+        self.post_code = post_code
+        self.country = country
+
     def __repr__(self):
-        return f"Address({self.street} {self.author}, {self.post_code} {self.city}, {self.country})"
+        return f"Address({self.street} {self.number}, {self.post_code} {self.city}, {self.country})"
+
+    def update_record(self, street: str = None, number: str = None, city: str = None,
+                      post_code: str = None, country: str = None, **other: dict):
+        if len(other) > 0:
+            raise InvalidRequestException
+
+        if street is not None:
+            self.street = street
+        if number is not None:
+            self.number = number
+        if city is not None:
+            self.city = city
+        if post_code is not None:
+            self.post_code = post_code
+        if country is not None:
+            self.country = country
+
+        return self.get_relaxed_view()
 
     def get_relaxed_view(self) -> dict:
         return {
-            'id': self.id,
             'street': self.street,
             'number': self.number,
             'city': self.city,
@@ -139,12 +173,93 @@ class Campus(Base):
 
     address = relationship('Address')
 
+    def __init__(self, address: Address = None, **other: dict):
+        if len(other) > 0 or address is None:
+            raise InvalidRequestException
+
+        self.address = address
+
     def __repr__(self):
         return f"Campus(address={self.address})"
 
     def get_relaxed_view(self) -> dict:
         return {
+            'id': self.address_id,
             'address': self.address.get_relaxed_view()
+        }
+
+
+class PhoneNumber(Base):
+    __table__ = Table(
+        'phone_number',
+        Base.metadata,
+        Column('customer_ssn', String, ForeignKey('customer.ssn'), primary_key=True),
+        Column('country_code', String(5), primary_key=True),
+        Column('number', String(15), primary_key=True),
+        Column('type', String(30), nullable=False),
+    )
+
+    def __init__(self, customer_ssn: str = None, country_code: str = None,
+                 number: str = None, type: str = 'HOME', **other: dict):
+        if len(other) > 0 or customer_ssn is None or country_code is None or number is None:
+            raise InvalidRequestException
+
+        self.customer_ssn = customer_ssn
+        self.country_code = country_code
+        self.number = number
+        self.type = type
+
+    def __repr__(self):
+        return f"Phone number(+{self.country_code} {self.number}, {self.type})"
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'country_code': self.country_code,
+            'number': self.number,
+            'type': self.type,
+        }
+
+
+class Card(Base):
+    __table__ = Table(
+        'card',
+        Base.metadata,
+        Column('id', String, primary_key=True, server_default=FetchedValue()),
+        Column('customer_ssn', String, ForeignKey('customer.ssn'), nullable=False),
+        Column('expiration_date', Date, nullable=False),
+        Column('photo_path', String(150), nullable=False),
+        Column('is_active', Boolean, default=True, nullable=False),
+    )
+
+    customer = relationship('Customer')
+
+    def __init__(self, customer_ssn: str = None, expiration_date: datetime = None,
+                 photo_path: str = 'default.png', is_active: bool = True, **other: dict):
+        if len(other) > 0 or customer_ssn is None or expiration_date is None:
+            raise InvalidRequestException
+
+        self.customer_ssn = customer_ssn
+        self.expiration_date = expiration_date
+        self.photo_path = photo_path
+        self.is_active = is_active
+
+    def __repr__(self):
+        return f"Card(ssn={self.customer_ssn} expires={self.expiration_date}, active={self.is_active})"
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'customer_ssn': self.customer_ssn,
+            'expiration_date': self.expiration_date,
+            'photo_path': self.photo_path,
+        }
+
+    def get_search_view(self):
+        return {
+            'card_id': self.id,
+            'ssn': self.customer_ssn,
+            'city': self.customer.address.city,
+            'full_name': f"{self.customer.first_name} {self.customer.last_name}"
         }
 
 
@@ -174,21 +289,24 @@ class Customer(Base, UserMixin):
     phone_numbers = relationship('PhoneNumber', lazy=True)
 
     def __init__(self, ssn: str = None, email: str = None, pw_hash: str = None, first_name: str = None,
-                 last_name: str = None, campus_id: int = None, type: str = 'STUDENT', home_address_id: int = None,
+                 last_name: str = None, campus_id: int = None, type: str = 'STUDENT', card: Card = None,
                  can_borrow: bool = True, can_reserve: bool = True, books_borrowed: int = 0, books_reserved: int = 0,
-                 is_active: bool = True, **other):
+                 is_active: bool = True, phone_numbers: bytearray = None, address: Address = None, **other: dict):
         if len(other) > 0 or ssn is None or email is None or pw_hash is None \
-                or first_name is None or last_name is None or campus_id is None or home_address_id is None:
+                or phone_numbers is None or len(phone_numbers) == 0 or first_name is None or last_name is None \
+                or campus_id is None or address is None or card is None:
             raise InvalidRequestException
 
         self.ssn = ssn
         self.email = email
-        self.pw_hash = pw_hash
+        self.password = pw_hash
         self.first_name = first_name
         self.last_name = last_name
         self.campus_id = campus_id
         self.type = type
-        self.home_address_id = home_address_id
+        self.card = [card]
+        self.phone_numbers = phone_numbers
+        self.address = address
         self.can_borrow = can_borrow
         self.can_reserve = can_reserve
         self.books_borrowed = books_borrowed
@@ -199,13 +317,42 @@ class Customer(Base, UserMixin):
         return f"Customer({self.first_name} {self.last_name} ({self.email}), borrowed: {self.books_borrowed}, reserved: {self.books_reserved})"
 
     @staticmethod
+    def generate_password():
+        return ''.join(choice(ascii_letters + digits) for i in range(randint(8, 12)))
+
+    @staticmethod
     def verify_reset_token(token):
         s = Serializer(current_app.config['CUSTOMER_SECRET_KEY'])
         try:
-            user_id = s.loads(token)['user_id']
+            ssn = s.loads(token)['ssn']
         except:
             return None
-        return Customer.query.get(user_id)
+        return Customer.query.get(ssn)
+
+    def update_record(self, ssn: str = None, first_name: str = None, last_name: str = None, email: str = None,
+                      campus_id: int = None, address: dict = None, phone_numbers: bytearray = None, **other: dict):
+        if len(other) > 0:
+            raise InvalidRequestException
+
+        if ssn is not None:
+            self.ssn = ssn
+        if first_name is not None:
+            self.first_name = first_name
+        if last_name is not None:
+            self.last_name = last_name
+        if email is not None:
+            self.email = email
+        if campus_id is not None:
+            self.campus_id = campus_id
+        if address is not None:
+            self.address.update_record(**address)
+        if type(phone_numbers) == list and len(phone_numbers) > 0:
+            for number in self.phone_numbers:
+                db.session.delete(number)
+            for phone_number in phone_numbers:
+                self.phone_numbers.append(PhoneNumber(customer_ssn=self.ssn if ssn is None else ssn, **phone_number))
+
+        return self.get_relaxed_view()
 
     def get_reset_token(self, expires_sec=3600):
         s = Serializer(current_app.config['CUSTOMER_SECRET_KEY'], expires_sec)
@@ -249,58 +396,6 @@ class CustomerWishlistItem(Base):
             'isbn': self.book_isbn,
             'requested_at': self.requested_at,
             'picked_up': self.picked_up,
-        }
-
-
-class PhoneNumber(Base):
-    __table__ = Table(
-        'phone_number',
-        Base.metadata,
-        Column('customer_ssn', String, ForeignKey('customer.ssn'), primary_key=True),
-        Column('country_code', String(5), primary_key=True),
-        Column('number', String(15), primary_key=True),
-        Column('type', String(30), nullable=False),
-    )
-
-    def __repr__(self):
-        return f"Phone number(+{self.country_code} {self.number}, {self.type})"
-
-    def get_relaxed_view(self) -> dict:
-        return {
-            'country_code': self.country_code,
-            'number': self.number,
-            'type': self.type,
-        }
-
-
-class Card(Base):
-    __table__ = Table(
-        'card',
-        Base.metadata,
-        Column('id', String, primary_key=True),
-        Column('customer_ssn', String, ForeignKey('customer.ssn'), nullable=False),
-        Column('expiration_date', Date, nullable=False),
-        Column('photo_path', String(150), nullable=False),
-        Column('is_active', Boolean, default=True, nullable=False),
-    )
-
-    customer = relationship('Customer')
-
-    def __repr__(self):
-        return f"Card(ssn={self.customer_ssn} expires={self.expiration_date}, active={self.is_active})"
-
-    def get_relaxed_view(self) -> dict:
-        return {
-            'id': self.id,
-            'customer_ssn': self.customer_ssn,
-            'expiration_date': self.expiration_date,
-            'photo_path': self.photo_path,
-        }
-
-    def get_search_view(self):
-        return {
-            'card_id': self.id,
-            'full_name': f"{self.customer.first_name} {self.customer.last_name}"
         }
 
 
