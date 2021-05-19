@@ -1,4 +1,5 @@
 from flask import current_app
+from datetime import datetime, timedelta
 from flask_login import UserMixin
 from itsdangerous import Serializer
 from datetime import datetime
@@ -71,12 +72,14 @@ class Book(Base):
             'author': self.author,
         }
 
-    def update_record(self, title: str = None, author: str = None, subject_area: str = None,
+    def update_record(self, newIsbn: str = None, title: str = None, author: str = None, subject_area: str = None,
                       description: str = None, is_loanable: bool = None, total_copies: int = None,
                       available_copies: int = None, resource_type: str = None, **other: dict) -> dict:
         if len(other) > 0:
             raise InvalidRequestException
 
+        if newIsbn is not None:
+            self.isbn = newIsbn
         if title is not None:
             self.title = title
         if author is not None:
@@ -107,8 +110,11 @@ class Book(Base):
 
         return self.get_relaxed_view()
 
-    def remove_record(self) -> None:
+    def disable_record(self) -> None:
         self.deleted = True
+
+    def enable_record(self) -> None:
+        self.deleted = False
 
 
 class Address(Base):
@@ -247,6 +253,9 @@ class Card(Base):
     def __repr__(self):
         return f"Card(ssn={self.customer_ssn} expires={self.expiration_date}, active={self.is_active})"
 
+    def extend_validity(self):
+        self.expiration_date = datetime.now() + timedelta(days=365)
+
     def get_relaxed_view(self) -> dict:
         return {
             'id': self.id,
@@ -290,12 +299,12 @@ class Customer(Base, UserMixin):
     phone_numbers = relationship('PhoneNumber', lazy=True)
 
     def __init__(self, ssn: str = None, email: str = None, pw_hash: str = None, first_name: str = None,
-                 last_name: str = None, campus_id: int = None, type: str = 'STUDENT', card: Card = None,
+                 last_name: str = None, campus_id: int = None, type: str = 'STUDENT', cards: list[Card] = None,
                  can_borrow: bool = True, can_reserve: bool = True, books_borrowed: int = 0, books_reserved: int = 0,
-                 is_active: bool = True, phone_numbers: bytearray = None, address: Address = None, **other: dict):
+                 is_active: bool = True, phone_numbers: list[PhoneNumber] = None, address: Address = None, **other: dict):
         if len(other) > 0 or ssn is None or email is None or pw_hash is None \
                 or phone_numbers is None or len(phone_numbers) == 0 or first_name is None or last_name is None \
-                or campus_id is None or address is None or card is None:
+                or campus_id is None or address is None or cards is None:
             raise InvalidRequestException
 
         self.ssn = ssn
@@ -305,7 +314,7 @@ class Customer(Base, UserMixin):
         self.last_name = last_name
         self.campus_id = campus_id
         self.type = type
-        self.card = list(card)
+        self.card = cards
         self.phone_numbers = phone_numbers
         self.address = address
         self.can_borrow = can_borrow
@@ -330,13 +339,13 @@ class Customer(Base, UserMixin):
             return None
         return Customer.query.get(ssn)
 
-    def update_record(self, ssn: str = None, first_name: str = None, last_name: str = None, email: str = None,
+    def update_record(self, newSsn: str = None, first_name: str = None, last_name: str = None, email: str = None,
                       campus_id: int = None, address: dict = None, phone_numbers: bytearray = None, **other: dict):
         if len(other) > 0:
             raise InvalidRequestException
 
-        if ssn is not None:
-            self.ssn = ssn
+        if newSsn is not None:
+            self.ssn = newSsn
         if first_name is not None:
             self.first_name = first_name
         if last_name is not None:
@@ -351,7 +360,7 @@ class Customer(Base, UserMixin):
             for number in self.phone_numbers:
                 db.session.delete(number)
             for phone_number in phone_numbers:
-                self.phone_numbers.append(PhoneNumber(customer_ssn=self.ssn if ssn is None else ssn, **phone_number))
+                self.phone_numbers.append(PhoneNumber(customer_ssn=self.ssn if newSsn is None else newSsn, **phone_number))
 
         return self.get_relaxed_view()
 
@@ -376,8 +385,11 @@ class Customer(Base, UserMixin):
             'is_active': self.is_active
         }
 
-    def remove_record(self) -> None:
+    def disable_record(self) -> None:
         self.is_active = False
+
+    def enable_record(self) -> None:
+        self.is_active = True
 
 
 class CustomerWishlistItem(Base):
@@ -466,8 +478,8 @@ class Loan(Base):
     __table__ = Table(
         'loan',
         Base.metadata,
-        Column('id', String, primary_key=True),
-        Column('book_isbn', String(30), ForeignKey('book.isbn'), nullable=False),
+        Column('id', String, primary_key=True, server_default=FetchedValue()),
+        Column('book_isbn', String(30), ForeignKey('book.isbn', onupdate="cascade"), nullable=False),
         Column('customer_ssn', String(20), ForeignKey('customer.ssn'), nullable=False, index=True),
         Column('issued_by', String, ForeignKey('librarian.ssn'), nullable=False),
         Column('loaned_at', DateTime, default=datetime.utcnow, nullable=False, index=True),
@@ -478,5 +490,26 @@ class Loan(Base):
     customer = relationship('Customer', lazy=True)
     librarian = relationship('Librarian', lazy=True)
 
+    def __init__(self, book_isbn: str = None, customer_ssn: str = None, issued_by: str = None,
+                 loaned_at: datetime = None, returned_at: datetime = None, **other: dict):
+        if len(other) > 0 or book_isbn is None or customer_ssn is None or issued_by is None:
+            raise InvalidRequestException
+
+        self.book_isbn = book_isbn
+        self.customer_ssn = customer_ssn
+        self.issued_by = issued_by
+        self.loaned_at = loaned_at
+        self.returned_at = returned_at
+
     def __repr__(self):
-        return f"Loan(book='{self.book_isbn}' customer='{self.customer_ssn}' ({self.loaned_at} - {self.returned_at})"
+        return f"Loan(book='{self.book_isbn}' customer='{self.customer_ssn}' issued_by='{self.issued_by}'" \
+               f" ({self.loaned_at} - {self.returned_at})"
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'isbn': self.book_isbn,
+            'issued_by': self.issued_by,
+            'loaned_at': self.loaned_at,
+            'returned_at': self.returned_at,
+        }

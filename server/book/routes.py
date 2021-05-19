@@ -64,7 +64,8 @@ def update_book(isbn: str) -> Response:
     except InvalidRequestException or RecordNotFound as e:
         db.session.rollback()
         res.set_error(e.message)
-    except IntegrityError:
+    except IntegrityError as e:
+        print(e)
         db.session.rollback()
         res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
     return res.get_response()
@@ -94,11 +95,30 @@ def disable_book(isbn: str) -> Response:
     res = CustomResponse()
     try:
         book = db.session.query(Book).get(isbn)
+        if book is None or not book.deleted:
+            raise RecordNotFound(isbn)
+        book.disable_record()
+        db.session.commit()
+        res.set_data(book.get_relaxed_view())
+    except RecordNotFound as e:
+        db.session.rollback()
+        res.set_error(e.message)
+    except IntegrityError:
+        db.session.rollback()
+        res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
+    return res.get_response()
+
+
+@books.route("/<isbn>/enable")
+def enable_book(isbn: str) -> Response:
+    res = CustomResponse()
+    try:
+        book = db.session.query(Book).get(isbn)
         if book is None or book.deleted:
             raise RecordNotFound(isbn)
-        book.remove_record()
+        book.enable_record()
         db.session.commit()
-        res.set_data({'id': isbn})
+        res.set_data(book.get_relaxed_view())
     except RecordNotFound as e:
         db.session.rollback()
         res.set_error(e.message)
