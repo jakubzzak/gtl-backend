@@ -27,12 +27,12 @@ class Book(Base):
         Column('total_copies', Integer, nullable=False),
         Column('available_copies', Integer, nullable=False),
         Column('resource_type', String(30), nullable=False),
-        # Column('active', Boolean, default=True, nullable=False),
+        Column('deleted', Boolean, default=False, nullable=False),
     )
 
     def __init__(self, isbn: str = None, title: str = None, author: str = None, subject_area: str = None,
                  description: str = None, is_loanable: bool = True, total_copies: int = 0,
-                 available_copies: int = 0, resource_type: str = 'BOOK', active: bool = True, **other: dict):
+                 available_copies: int = 0, resource_type: str = 'BOOK', deleted: bool = False, **other: dict):
         if len(other) > 0 or isbn is None or title is None or author is None or subject_area is None:
             raise InvalidRequestException
 
@@ -45,10 +45,11 @@ class Book(Base):
         self.available_copies = available_copies
         self.resource_type = resource_type
         self.is_loanable = is_loanable
-        # self.active = active
+        self.deleted = deleted
 
     def __repr__(self):
-        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', type='{self.resource_type}')"
+        return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', " \
+               f"type='{self.resource_type}', {'was deleted' if  self.deleted else ''})"
 
     def get_relaxed_view(self) -> dict:
         return {
@@ -106,8 +107,8 @@ class Book(Base):
 
         return self.get_relaxed_view()
 
-    def remove_from_catalog(self) -> None:
-        self.active = False
+    def remove_record(self) -> None:
+        self.deleted = True
 
 
 class Address(Base):
@@ -304,7 +305,7 @@ class Customer(Base, UserMixin):
         self.last_name = last_name
         self.campus_id = campus_id
         self.type = type
-        self.card = [card]
+        self.card = list(card)
         self.phone_numbers = phone_numbers
         self.address = address
         self.can_borrow = can_borrow
@@ -368,12 +369,15 @@ class Customer(Base, UserMixin):
             'card': list(filter(lambda card: card.is_active, self.card))[0].get_relaxed_view(),
             'campus': self.campus.get_relaxed_view(),
             'address': self.address.get_relaxed_view(),
-            'phone_numbers': [phone_number.get_relaxed_view() for phone_number in self.phone_numbers],
-            'wishlist': [wishlist_item.get_relaxed_view() for wishlist_item in self.wishlist_items],
+            'phone_numbers': list(map(lambda phone: phone.get_relaxed_view(), self.phone_numbers)),
+            'wishlist': list(map(lambda item: item.get_relaxed_view(), self.wishlist_items)),
             'can_borrow': self.can_borrow,
             'can_reserve': self.can_reserve,
             'is_active': self.is_active
         }
+
+    def remove_record(self) -> None:
+        self.is_active = False
 
 
 class CustomerWishlistItem(Base):
@@ -431,15 +435,31 @@ class Librarian(Base, UserMixin):
 
 class LibrarianWishlistItem(Base):
     __table__ = Table(
-        'librarian_wishlist_item',
+        'library_wishlist_item',
         Base.metadata,
-        Column('id', String, primary_key=True),
+        Column('id', String, primary_key=True, server_default=FetchedValue()),
         Column('title', String(100), nullable=False),
         Column('description', Text),
     )
 
+    def __init__(self, id: str = None, title: str = None, description: str = None, **other: dict ):
+        if len(other) > 0 or title is None or len(title) == 0 or description is None:
+            raise InvalidRequestException
+
+        self.id = id
+        self.title = title
+        self.description = description
+
+
     def __repr__(self):
-        return f"Librarian wishlist item(title={self.title}, description={self.description})"
+        return f"Library wishlist item(title={self.title}, description={self.description})"
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description if self.description is not None else '',
+        }
 
 
 class Loan(Base):

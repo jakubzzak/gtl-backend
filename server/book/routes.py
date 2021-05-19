@@ -13,7 +13,7 @@ books = Blueprint('books', __name__, url_prefix='/api/book')
 def find_customer(isbn: str) -> Response:
     res = CustomResponse(data=[])
     try:
-        _books = db.session.query(Book).filter(Book.isbn.like(f"{isbn}%")).limit(10).all()
+        _books = db.session.query(Book).filter(Book.isbn.like(f"{isbn}%"), Book.deleted == 0).limit(10).all()
         res.set_data(list(map(lambda book: book.get_search_view(), _books)))
     except IntegrityError as e:
         print(str(e))
@@ -25,7 +25,7 @@ def get_book(isbn: str) -> Response:
     res = CustomResponse(data=[])
     try:
         book = db.session.query(Book).get(isbn)
-        if book is None:
+        if book is None or book.deleted:
             raise RecordNotFound(isbn)
         res.set_data(book.get_relaxed_view())
     except RecordNotFound as e:
@@ -56,7 +56,7 @@ def update_book(isbn: str) -> Response:
     res = CustomResponse()
     try:
         book = db.session.query(Book).get(isbn)
-        if book is None:
+        if book is None or book.deleted:
             raise RecordNotFound(isbn)
         book.update_record(**request.json)
         db.session.commit()
@@ -75,7 +75,7 @@ def update_book_stock(isbn: str) -> Response:
     res = CustomResponse()
     try:
         book = db.session.query(Book).get(isbn)
-        if book is None:
+        if book is None or book.deleted:
             raise RecordNotFound(isbn)
         book.update_stock(**request.json)
         db.session.commit()
@@ -94,9 +94,9 @@ def disable_book(isbn: str) -> Response:
     res = CustomResponse()
     try:
         book = db.session.query(Book).get(isbn)
-        if book is None:
+        if book is None or book.deleted:
             raise RecordNotFound(isbn)
-        book.remove_from_catalog()
+        book.remove_record()
         db.session.commit()
         res.set_data({'id': isbn})
     except RecordNotFound as e:
