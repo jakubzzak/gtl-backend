@@ -6,7 +6,6 @@ from server.config import Config
 from sqlalchemy.exc import IntegrityError
 from server.models import Book
 
-
 books = Blueprint('books', __name__, url_prefix='/api/book')
 
 

@@ -39,7 +39,8 @@ def create_new_customer() -> Response:
     try:
         pw_hash = bcrypt.generate_password_hash(password=Customer.generate_password())
         phone_numbers = request.json.get('phone_numbers')
-        phone_numbers = list(map(lambda number: PhoneNumber(customer_ssn=request.json.get('ssn'), **number), phone_numbers))
+        phone_numbers = list(
+            map(lambda number: PhoneNumber(customer_ssn=request.json.get('ssn'), **number), phone_numbers))
         address = request.json.get('address')
         address = Address(**address)
         if phone_numbers is not None and address is not None:

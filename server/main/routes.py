@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 from flask import request, session, Blueprint, Response
 from sqlalchemy.exc import IntegrityError
 from flask_login import login_required, current_user, login_user, logout_user
-from server.config import CustomResponse, Config, InvalidRequestException, RecordNotFoundException, UnauthorizedAccessException
+from server.config import CustomResponse, Config, InvalidRequestException, RecordNotFoundException, \
+    UnauthorizedAccessException
 from server import db, bcrypt
 from server.models import Campus, LibrarianWishlistItem, Librarian, CustomerWishlistItem
 
@@ -102,7 +103,7 @@ def remove_item_from_library_wishlist(id: str) -> Response:
 @login_required
 def fetch_library_reservations() -> Response:
     res = CustomResponse()
-    library_reservations = db.session.query(CustomerWishlistItem)\
+    library_reservations = db.session.query(CustomerWishlistItem) \
         .filter(CustomerWishlistItem.requested_at is not None,
                 CustomerWishlistItem.requested_at > (datetime.now() - timedelta(days=30)),
                 CustomerWishlistItem.picked_up == 0).all()

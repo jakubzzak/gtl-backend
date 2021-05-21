@@ -31,7 +31,11 @@ class SearchRequest:
                and self.groups[0] is not None and self.groups[0] in groups \
                and self.columns is not None and len(self.columns) > 0 \
                and len(self.columns) > 0 \
-               and (self.columns[0] in searchable_columns if len(self.columns) == 1 else reduce((lambda x, y: x and y), [col in searchable_columns for col in self.columns]))
+               and (self.columns[0] in searchable_columns if len(self.columns) == 1 else reduce((lambda x, y: x and y),
+                                                                                                [
+                                                                                                    col in searchable_columns
+                                                                                                    for col in
+                                                                                                    self.columns]))
 
 
 @search.route("/", methods=['POST'])
@@ -51,9 +55,9 @@ def search_in_catalog() -> Response:
                 AND
                 (
                 {"title like '%" + req.phrase + "%'" if 'TITLE' in req.columns else ''}
-                {" or " if 'AUTHOR' in req.columns and 'TITLE' in req.columns else '' }
+                {" or " if 'AUTHOR' in req.columns and 'TITLE' in req.columns else ''}
                 {"author like '%" + req.phrase + "%'" if 'AUTHOR' in req.columns else ''}
-                {" or " if 'AREA' in req.columns and len(req.columns) > 1 else '' }
+                {" or " if 'AREA' in req.columns and len(req.columns) > 1 else ''}
                 {"subject_area like '%" + req.phrase + "%'" if 'AREA' in req.columns else ''}
                 )
             ORDER BY isbn

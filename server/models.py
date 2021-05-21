@@ -10,7 +10,6 @@ from string import ascii_letters, digits
 from random import choice, randint
 from server import db, login_manager, bcrypt
 
-
 Base = declarative_base()
 
 
@@ -49,7 +48,7 @@ class Book(Base):
 
     def __repr__(self):
         return f"Book(title='{self.title}', author='{self.author}', area='{self.subject_area}', " \
-               f"type='{self.resource_type}', {'was deleted' if  self.deleted else ''})"
+               f"type='{self.resource_type}', {'was deleted' if self.deleted else ''})"
 
     def get_relaxed_view(self) -> dict:
         return {
@@ -296,7 +295,8 @@ class Customer(Base, UserMixin):
     def __init__(self, ssn: str = None, email: str = None, pw_hash: str = None, first_name: str = None,
                  last_name: str = None, campus_id: int = None, type: str = 'STUDENT', cards: list[Card] = None,
                  can_borrow: bool = True, can_reserve: bool = True, books_borrowed: int = 0, books_reserved: int = 0,
-                 is_active: bool = True, phone_numbers: list[PhoneNumber] = None, address: Address = None, **other: dict):
+                 is_active: bool = True, phone_numbers: list[PhoneNumber] = None, address: Address = None,
+                 **other: dict):
         if len(other) > 0 or ssn is None or email is None or pw_hash is None \
                 or phone_numbers is None or len(phone_numbers) == 0 or first_name is None or last_name is None \
                 or campus_id is None or address is None or cards is None:
@@ -384,6 +384,17 @@ class Customer(Base, UserMixin):
             'can_borrow': self.can_borrow,
             'can_reserve': self.can_reserve,
             'is_active': self.is_active
+        }
+
+    def get_relaxed_v1_view(self) -> dict:
+        return {
+            'ssn': self.ssn,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'campus': self.campus.get_relaxed_view(),
+            'address': self.address.get_relaxed_view(),
+            'phone_numbers': list(map(lambda phone: phone.get_relaxed_view(), self.phone_numbers)),
         }
 
     def disable_record(self) -> None:
@@ -518,7 +529,7 @@ class LibrarianWishlistItem(Base):
         Column('description', Text),
     )
 
-    def __init__(self, id: str = None, title: str = None, description: str = None, **other: dict ):
+    def __init__(self, id: str = None, title: str = None, description: str = None, **other: dict):
         if len(other) > 0 or title is None or len(title) == 0 or description is None:
             raise InvalidRequestException
 

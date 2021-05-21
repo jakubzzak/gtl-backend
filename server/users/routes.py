@@ -135,4 +135,3 @@ def request_from_wishlist(id: str) -> Response:
         db.session.rollback()
         res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)
     return res.get_response()
-

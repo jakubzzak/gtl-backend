@@ -33,6 +33,7 @@ def create_app(config_class=Config):
     from server.customers.routes import customers
     from server.users.routes import users, users_unsecure
     from server.main.routes import main, main_unsecure
+    from server.v1.routes import public_api
 
     app.register_blueprint(search)
     app.register_blueprint(books)
@@ -41,5 +42,6 @@ def create_app(config_class=Config):
     app.register_blueprint(users_unsecure)
     app.register_blueprint(main)
     app.register_blueprint(main_unsecure)
+    app.register_blueprint(public_api)
 
     return app
