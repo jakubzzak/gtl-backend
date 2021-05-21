@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from flask import request, session, Blueprint, Response
+from sqlalchemy.sql import text
 from sqlalchemy.exc import IntegrityError
 from flask_login import login_required, current_user, login_user, logout_user
 from server.config import CustomResponse, Config, InvalidRequestException, RecordNotFoundException, \
@@ -108,6 +109,29 @@ def fetch_library_reservations() -> Response:
                 CustomerWishlistItem.requested_at > (datetime.now() - timedelta(days=30)),
                 CustomerWishlistItem.picked_up == 0).all()
     res.set_data(list(map(lambda item: item.get_librarian_relaxed_view(), library_reservations)))
+    return res.get_response()
+
+
+@main.route('/loans/overdue/<int:page>')
+@login_required
+def fetch_overdue_loans(page: int) -> Response:
+    res = CustomResponse()
+    with db.engine.connect() as con:
+        statement = text(f"""
+        select * from loans_after_grace_period
+        where grace_period_end < getdate()
+         order by grace_period_end desc
+         OFFSET :page * 25 ROWS
+            FETCH NEXT 25 ROW ONLY;
+         """)
+        rs = con.execute(statement, {'page':page})
+        data = []
+        for row in rs:
+            row_val = dict()
+            for column, value in row.items():
+                row_val[column] = value
+            data.append(row_val)
+    res.set_data(data)
     return res.get_response()
 
 
