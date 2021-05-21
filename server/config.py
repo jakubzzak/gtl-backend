@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-from flask import Response, json
+from flask import Response, json, session
 
 
 load_dotenv()
@@ -19,9 +19,39 @@ class Config:
         else 'Ups! Unhandled exception occurred.'
 
 
+class UnauthorizedAccessException(Exception):
+
+    def __init__(self, message: str = None):
+        self.message = message if message is not None else 'Unauthorized access!'
+
+
+class InvalidRequestException(Exception):
+
+    def __init__(self, message: str = 'Invalid request!'):
+        self.message = message
+
+
+class RecordAlreadyExistsException(Exception):
+
+    def __init__(self, value: str = None):
+        self.message = f"Record with value {value} already exist!" if value is not None else f"Record already exist!"
+
+
+class RecordNotFoundException(Exception):
+
+    def __init__(self, value: str = None):
+        self.message = f"Record with value {value} does not exist!" if value is not None else f"Record does not exist!"
+
+
 class CustomResponse:
 
-    def __init__(self, data=None, error=None):
+    def __init__(self, data: any = None, error: str = None, librarian_level: bool = False):
+        if librarian_level and session.get('login_type') != 'librarian':
+            self.ok = False
+            self.data = None
+            self.error = None
+            raise UnauthorizedAccessException
+
         self.ok = True
         self.data = data
         self.error = error
@@ -42,15 +72,3 @@ class CustomResponse:
     def get_response(self, status: int = None) -> Response:
         return Response(json.dumps({"ok": self.ok, "data": self.data, "error": self.error}),
                         status=status if status is not None else 200 if self.ok else 406, mimetype='application/json')
-
-
-class InvalidRequestException(Exception):
-
-    def __init__(self, message='Invalid request!'):
-        self.message = message
-
-
-class RecordNotFound(Exception):
-
-    def __init__(self, value: str = None):
-        self.message = f"Record with value {value} does not exist!" if value is not None else f"Record does not exist!"

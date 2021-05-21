@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, Response
 from server import db, bcrypt
 from sqlalchemy.exc import IntegrityError
-from server.config import CustomResponse, RecordNotFound, InvalidRequestException, Config
+from server.config import CustomResponse, RecordNotFoundException, InvalidRequestException, Config
 from server.models import Customer, Card, PhoneNumber, Address, Loan
 
 customers = Blueprint('customers', __name__, url_prefix='/api/customer')
@@ -26,9 +26,9 @@ def get_customer(ssn: str) -> Response:
     try:
         customer = db.session.query(Customer).get(ssn)
         if customer is None:
-            raise RecordNotFound(ssn)
+            raise RecordNotFoundException(ssn)
         res.set_data(customer.get_relaxed_view())
-    except RecordNotFound as e:
+    except RecordNotFoundException as e:
         res.set_error(e.message)
     return res.get_response()
 
@@ -38,11 +38,16 @@ def create_new_customer() -> Response:
     res = CustomResponse()
     try:
         pw_hash = bcrypt.generate_password_hash(password=Customer.generate_password())
-        phone_numbers = list(map(lambda number: PhoneNumber(customer_ssn=request.json['ssn'], **number), request.json['phone_numbers']))
-        del request.json['phone_numbers']
-        address = Address(**request.json['address'])
-        del request.json['address']
-        cards = [Card(customer_ssn=request.json['ssn'], expiration_date=datetime.now() + timedelta(days=365 * 4))]
+        phone_numbers = request.json.get('phone_numbers')
+        phone_numbers = list(map(lambda number: PhoneNumber(customer_ssn=request.json.get('ssn'), **number), phone_numbers))
+        address = request.json.get('address')
+        address = Address(**address)
+        if phone_numbers is not None and address is not None:
+            del request.json['phone_numbers']
+            del request.json['address']
+        else:
+            raise InvalidRequestException('Address and phone numbers must not be empty!')
+        cards = [Card(customer_ssn=request.json.get('ssn'), expiration_date=datetime.now() + timedelta(days=365 * 4))]
         customer = Customer(**request.json, cards=cards, address=address, phone_numbers=phone_numbers, pw_hash=pw_hash)
         db.session.add(customer)
         db.session.commit()
@@ -62,13 +67,14 @@ def create_new_customer() -> Response:
 def update_customer(ssn: str) -> Response:
     res = CustomResponse()
     try:
-        customer = db.session.query(Customer).get(ssn)
-        if customer is None:
-            raise RecordNotFound()
-        customer.update_record(**request.json)
-        db.session.commit()
-        res.set_data(customer.get_relaxed_view())
-    except InvalidRequestException or RecordNotFound as e:
+        with db.session.no_autoflush:
+            customer = db.session.query(Customer).get(ssn)
+            if customer is None:
+                raise RecordNotFoundException()
+            customer.update_record(**request.json)
+            db.session.commit()
+            res.set_data(customer.get_relaxed_view())
+    except InvalidRequestException or RecordNotFoundException as e:
         db.session.rollback()
         res.set_error(e.message)
     except IntegrityError as e:
@@ -84,11 +90,11 @@ def disable_customer(ssn: str) -> Response:
     try:
         customer = db.session.query(Customer).get(ssn)
         if customer is None or not customer.is_active:
-            raise RecordNotFound()
+            raise RecordNotFoundException()
         customer.disable_record()
         db.session.commit()
         res.set_data(customer.get_relaxed_view())
-    except InvalidRequestException or RecordNotFound as e:
+    except InvalidRequestException or RecordNotFoundException as e:
         db.session.rollback()
         res.set_error(e.message)
     except IntegrityError as e:
@@ -97,17 +103,17 @@ def disable_customer(ssn: str) -> Response:
     return res.get_response()
 
 
-@customers.route('/<ssn>/enable')
+@customers.route('/<ssn>/enable', methods=['PUT'])
 def enable_customer(ssn: str) -> Response:
     res = CustomResponse()
     try:
         customer = db.session.query(Customer).get(ssn)
         if customer is None or customer.is_active:
-            raise RecordNotFound()
+            raise RecordNotFoundException()
         customer.enable_record()
         db.session.commit()
         res.set_data(customer.get_relaxed_view())
-    except InvalidRequestException or RecordNotFound as e:
+    except InvalidRequestException or RecordNotFoundException as e:
         db.session.rollback()
         res.set_error(e.message)
     except IntegrityError as e:
@@ -134,11 +140,11 @@ def extend_customers_card_validity(id: str) -> Response:
     try:
         card = db.session.query(Card).get(id)
         if card is None or card.customer.is_active is False:
-            raise RecordNotFound(id)
+            raise RecordNotFoundException(id)
         card.extend_validity()
         db.session.commit()
         res.set_data(card.customer.get_relaxed_view())
-    except RecordNotFound as e:
+    except RecordNotFoundException as e:
         db.session.rollback()
         res.set_error(e.message)
 

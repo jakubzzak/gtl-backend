@@ -12,8 +12,6 @@ db = SQLAlchemy()
 # db_base = registry()
 bcrypt = Bcrypt()
 login_manager = LoginManager()
-login_manager.login_view = 'user_old.login'
-login_manager.login_message_category = 'info'
 mail = Mail()
 
 
@@ -33,13 +31,15 @@ def create_app(config_class=Config):
     from server.search.routes import search
     from server.book.routes import books
     from server.customers.routes import customers
-    from server.users.routes import users
-    from server.main.routes import main
+    from server.users.routes import users, users_unsecure
+    from server.main.routes import main, main_unsecure
 
     app.register_blueprint(search)
     app.register_blueprint(books)
     app.register_blueprint(customers)
     app.register_blueprint(users)
+    app.register_blueprint(users_unsecure)
     app.register_blueprint(main)
+    app.register_blueprint(main_unsecure)
 
     return app

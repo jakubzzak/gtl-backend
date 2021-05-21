@@ -1,15 +1,14 @@
-from flask import current_app
+from flask import current_app, session
 from datetime import datetime, timedelta
 from flask_login import UserMixin
 from itsdangerous import Serializer
-from datetime import datetime
 from sqlalchemy import Table, Column, String, Text, Integer, Boolean, ForeignKey, SmallInteger, DateTime, Date, \
     FetchedValue
 from sqlalchemy.orm import relationship, declarative_base
 from server.config import InvalidRequestException
 from string import ascii_letters, digits
 from random import choice, randint
-from server import db
+from server import db, login_manager, bcrypt
 
 
 Base = declarative_base()
@@ -62,7 +61,8 @@ class Book(Base):
             'resource_type': self.resource_type,
             'total_copies': self.total_copies,
             'available_copies': self.available_copies,
-            'is_loanable': self.is_loanable
+            'is_loanable': self.is_loanable,
+            'is_active': not self.deleted,
         }
 
     def get_search_view(self):
@@ -72,14 +72,12 @@ class Book(Base):
             'author': self.author,
         }
 
-    def update_record(self, newIsbn: str = None, title: str = None, author: str = None, subject_area: str = None,
-                      description: str = None, is_loanable: bool = None, total_copies: int = None,
-                      available_copies: int = None, resource_type: str = None, **other: dict) -> dict:
+    def update_record(self, title: str = None, author: str = None, subject_area: str = None,
+                      description: str = None, is_loanable: bool = None, resource_type: str = None,
+                      **other: dict) -> dict:
         if len(other) > 0:
             raise InvalidRequestException
 
-        if newIsbn is not None:
-            self.isbn = newIsbn
         if title is not None:
             self.title = title
         if author is not None:
@@ -90,10 +88,6 @@ class Book(Base):
             self.description = description
         if is_loanable is not None:
             self.is_loanable = is_loanable
-        if total_copies is not None:
-            self.total_copies = total_copies
-        if available_copies is not None:
-            self.available_copies = available_copies
         if resource_type is not None:
             self.resource_type = resource_type
 
@@ -292,11 +286,12 @@ class Customer(Base, UserMixin):
         Column('is_active', Boolean, default=True, nullable=False),
     )
 
-    card = relationship('Card', lazy=True)
+    cards = relationship('Card', lazy=True)
     campus = relationship('Campus', lazy=True)
     address = relationship('Address', lazy=True)
     wishlist_items = relationship('CustomerWishlistItem', lazy=True)
     phone_numbers = relationship('PhoneNumber', lazy=True)
+    loans = relationship('Loan', lazy=True)
 
     def __init__(self, ssn: str = None, email: str = None, pw_hash: str = None, first_name: str = None,
                  last_name: str = None, campus_id: int = None, type: str = 'STUDENT', cards: list[Card] = None,
@@ -314,7 +309,7 @@ class Customer(Base, UserMixin):
         self.last_name = last_name
         self.campus_id = campus_id
         self.type = type
-        self.card = cards
+        self.cards = cards
         self.phone_numbers = phone_numbers
         self.address = address
         self.can_borrow = can_borrow
@@ -337,15 +332,20 @@ class Customer(Base, UserMixin):
             ssn = s.loads(token)['ssn']
         except:
             return None
-        return Customer.query.get(ssn)
+        return db.session.query(Customer).get(ssn)
 
-    def update_record(self, newSsn: str = None, first_name: str = None, last_name: str = None, email: str = None,
+    @staticmethod
+    def translate_password(password):
+        return bcrypt.generate_password_hash(password)
+
+    def get_id(self) -> str:
+        return self.ssn
+
+    def update_record(self, first_name: str = None, last_name: str = None, email: str = None,
                       campus_id: int = None, address: dict = None, phone_numbers: bytearray = None, **other: dict):
         if len(other) > 0:
             raise InvalidRequestException
 
-        if newSsn is not None:
-            self.ssn = newSsn
         if first_name is not None:
             self.first_name = first_name
         if last_name is not None:
@@ -360,7 +360,7 @@ class Customer(Base, UserMixin):
             for number in self.phone_numbers:
                 db.session.delete(number)
             for phone_number in phone_numbers:
-                self.phone_numbers.append(PhoneNumber(customer_ssn=self.ssn if newSsn is None else newSsn, **phone_number))
+                self.phone_numbers.append(PhoneNumber(customer_ssn=self.ssn, **phone_number))
 
         return self.get_relaxed_view()
 
@@ -369,13 +369,14 @@ class Customer(Base, UserMixin):
         return s.dumps({'user_id': self.id}).decode('utf-8')
 
     def get_relaxed_view(self) -> dict:
+        cards = list(filter(lambda card: card.is_active, self.cards))
         return {
             'ssn': self.ssn,
             'email': self.email,
             'first_name': self.first_name,
             'last_name': self.last_name,
             'type': self.type,
-            'card': list(filter(lambda card: card.is_active, self.card))[0].get_relaxed_view(),
+            'card': cards[0].get_relaxed_view() if len(cards) > 0 else None,
             'campus': self.campus.get_relaxed_view(),
             'address': self.address.get_relaxed_view(),
             'phone_numbers': list(map(lambda phone: phone.get_relaxed_view(), self.phone_numbers)),
@@ -392,24 +393,68 @@ class Customer(Base, UserMixin):
         self.is_active = True
 
 
+@login_manager.user_loader
+def load_customer(ssn: str) -> any:
+    login_type = session.get('login_type')
+    if login_type == 'librarian':
+        return db.session.query(Librarian).get(ssn)
+    else:
+        return db.session.query(Customer).get(ssn)
+
+
 class CustomerWishlistItem(Base):
     __table__ = Table(
         'customer_wishlist_item',
         Base.metadata,
-        Column('id', String, primary_key=True),
+        Column('id', String, primary_key=True, server_default=FetchedValue()),
         Column('customer_ssn', String, ForeignKey('customer.ssn'), nullable=False),
         Column('book_isbn', String, ForeignKey('book.isbn'), nullable=False),
         Column('requested_at', DateTime),
         Column('picked_up', Boolean, default=False, nullable=False),
     )
 
+    customer = relationship('Customer', lazy=True)
+    book = relationship('Book', lazy=True)
+
+    def __init__(self, id: str = None, customer_ssn: str = None, book_isbn: str = None,
+                 requested_at: datetime = None, picked_up: bool = False, **other: dict):
+        if len(other) > 0 or customer_ssn is None or book_isbn is None:
+            raise InvalidRequestException
+
+        self.id = id
+        self.customer_ssn = customer_ssn
+        self.book_isbn = book_isbn
+        self.requested_at = requested_at
+        self.picked_up = picked_up
+
     def __repr__(self):
         return f"Customer wishlist item(customer={self.customer_ssn}, book={self.book_isbn}, requested_at={self.requested_at}, picked_up={self.picked_up})"
+
+    def request_now(self):
+        self.requested_at = datetime.now()
 
     def get_relaxed_view(self) -> dict:
         return {
             'id': self.id,
-            'isbn': self.book_isbn,
+            'book': {
+                'isbn': self.book_isbn,
+                'title': self.book.title,
+            },
+            'requested_at': self.requested_at,
+            'picked_up': self.picked_up,
+        }
+
+    def get_librarian_relaxed_view(self) -> dict:
+        return {
+            'id': self.id,
+            'book': {
+                'isbn': self.book_isbn,
+                'title': self.book.title,
+            },
+            'customer': {
+                'ssn': self.customer_ssn,
+                'full_name': f"{self.customer.first_name} {self.customer.last_name}"
+            },
             'requested_at': self.requested_at,
             'picked_up': self.picked_up,
         }
@@ -419,14 +464,16 @@ class Librarian(Base, UserMixin):
     __table__ = Table(
         'librarian',
         Base.metadata,
-        Column('id', String, primary_key=True),
-        Column('ssn', String(20), nullable=False, unique=True),
+        Column('ssn', String(20), primary_key=True),
         Column('email', String(100), nullable=False, unique=True),
         Column('password', String(60), nullable=False),
         Column('first_name', String(100), nullable=False),
         Column('last_name', String(100), nullable=False),
+        Column('campus', Integer, ForeignKey('campus.address_id'), nullable=False),
         Column('position', String(30), nullable=False),
     )
+
+    campus_address = relationship('Campus', lazy=True)
 
     @staticmethod
     def verify_reset_token(token):
@@ -441,8 +488,25 @@ class Librarian(Base, UserMixin):
         s = Serializer(current_app.config['SECRET_KEY'], expires_sec)
         return s.dumps({'user_id': self.id}).decode('utf-8')
 
+    @staticmethod
+    def translate_password(password):
+        return bcrypt.generate_password_hash(password)
+
     def __repr__(self):
         return f"Librarian({self.first_name} {self.last_name} ({self.email}), {self.position})"
+
+    def get_id(self) -> str:
+        return self.ssn
+
+    def get_relaxed_view(self) -> dict:
+        return {
+            'ssn': self.ssn,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'campus': self.campus_address.get_relaxed_view(),
+            'type': self.position,
+        }
 
 
 class LibrarianWishlistItem(Base):
@@ -461,7 +525,6 @@ class LibrarianWishlistItem(Base):
         self.id = id
         self.title = title
         self.description = description
-
 
     def __repr__(self):
         return f"Library wishlist item(title={self.title}, description={self.description})"
@@ -508,7 +571,10 @@ class Loan(Base):
     def get_relaxed_view(self) -> dict:
         return {
             'id': self.id,
-            'isbn': self.book_isbn,
+            'book': {
+                'isbn': self.book_isbn,
+                'title': self.book.title,
+            },
             'issued_by': self.issued_by,
             'loaned_at': self.loaned_at,
             'returned_at': self.returned_at,
