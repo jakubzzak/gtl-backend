@@ -21,14 +21,14 @@ class SearchRequest:
         self.offset = offset
         self.limit = limit
         self.phrase = phrase
-        self.groups = groups if group == 'EVERYTHING' else [group]
+        self.group = group
         self.columns = columns
 
     def is_valid(self):
         return self.offset is not None and self.offset >= 0 \
                and self.limit is not None and self.limit >= 5 \
                and self.phrase is not None and len(self.phrase) > 0 \
-               and self.groups[0] is not None and self.groups[0] in groups \
+               and self.group is not None and self.group in groups \
                and self.columns is not None and len(self.columns) > 0 \
                and len(self.columns) > 0 \
                and (self.columns[0] in searchable_columns if len(self.columns) == 1 else reduce((lambda x, y: x and y),
@@ -48,21 +48,14 @@ def search_in_catalog() -> Response:
             raise InvalidRequestException
         with db.engine.connect() as con:
             statement = text(f"""
-            SELECT * FROM book
-            WHERE deleted=0 
-                AND
-                resource_type IN {"('" + req.groups[0] + "')" if len(req.groups) == 1 else tuple(req.groups)} 
-                AND
-                (
-                {"title like '%" + req.phrase + "%'" if 'TITLE' in req.columns else ''}
-                {" or " if 'AUTHOR' in req.columns and 'TITLE' in req.columns else ''}
-                {"author like '%" + req.phrase + "%'" if 'AUTHOR' in req.columns else ''}
-                {" or " if 'AREA' in req.columns and len(req.columns) > 1 else ''}
-                {"subject_area like '%" + req.phrase + "%'" if 'AREA' in req.columns else ''}
-                )
-            ORDER BY isbn
-            OFFSET :offset ROWS
-            FETCH NEXT :limit ROW ONLY;
+                exec find_book
+                @order_by = 'title',
+                @offset = :offset,
+                @limit = :limit,
+                @search_group = :group,
+                @title = {"'" + req.phrase + "'" if 'TITLE' in req.columns else 'null'},
+                @author = {"'" + req.phrase + "'" if 'AUTHOR' in req.columns else 'null'},
+                @area = {"'" + req.phrase + "'" if 'AREA' in req.columns else 'null'};
             """)
             rs = con.execute(statement, req.__dict__)
             data = []
