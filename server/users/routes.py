@@ -8,7 +8,7 @@ users = Blueprint('users', __name__, url_prefix='/api/user')
 users_unsecure = Blueprint('users_unsecure', __name__, url_prefix='/user')
 
 
-@users_unsecure.route('/hash/<password>')
+# @users_unsecure.route('/hash/<password>')
 def translate_password(password: str) -> Response:
     res = CustomResponse()
     hash = Customer.translate_password(password)

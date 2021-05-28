@@ -12,7 +12,7 @@ main = Blueprint('main', __name__, url_prefix='/api/library')
 main_unsecure = Blueprint('main_unsecure', __name__, url_prefix='/library')
 
 
-@main_unsecure.route('/hash/<password>')
+# @main_unsecure.route('/hash/<password>')
 def translate_password(password: str) -> Response:
     res = CustomResponse()
     hash = Librarian.translate_password(password)
