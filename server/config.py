@@ -55,6 +55,9 @@ class CustomResponse:
         self.data = data
         self.error = error
 
+    def get_data(self):
+        return self.data
+
     def set_data(self, value: any) -> None:
         self.error = None
         self.data = value

@@ -112,19 +112,37 @@ def fetch_library_reservations() -> Response:
     return res.get_response()
 
 
+@main.route('/reservations/accept/<uuid:id>')
+@login_required
+def accept_library_reservation(id: str) -> Response:
+    res = CustomResponse()
+    try:
+        item = db.session.query(CustomerWishlistItem).get(id)
+        if item is None or item.id not in list(map(lambda it: it['id'], fetch_library_reservations().json['data'])):
+            raise RecordNotFoundException(id)
+        # TODO: mark item as accepted
+        db.session.commit()
+        res.set_data(item.get_librarian_relaxed_view())
+    except RecordNotFoundException as e:
+        db.session.rollback()
+        res.set_error(e.message)
+    return res.get_response()
+
+
 @main.route('/loans/overdue/<int:page>')
 @login_required
 def fetch_overdue_loans(page: int) -> Response:
     res = CustomResponse()
     with db.engine.connect() as con:
         statement = text(f"""
-        select * from loans_after_grace_period
+        select * 
+        from not_returned_loans
         where grace_period_end < getdate()
-         order by grace_period_end desc
-         OFFSET :page * 25 ROWS
-            FETCH NEXT 25 ROW ONLY;
+        order by grace_period_end desc
+        OFFSET :page * 25 ROWS
+        FETCH NEXT 25 ROW ONLY;
          """)
-        rs = con.execute(statement, {'page':page})
+        rs = con.execute(statement, {'page': page})
         data = []
         for row in rs:
             row_val = dict()
