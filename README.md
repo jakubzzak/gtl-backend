@@ -36,6 +36,16 @@ To run the server in your terminal navigate to the root of the folder and run th
 
 \
 \
-\
-You are good to go now! May you have any questions, do not hesitate to contact authors.
+Now when your backend is ready take a look at:
+- https://github.com/jakubzzak/georgia-tech-library (React FE)
+- https://github.com/jakubzzak/gtl-db (Mssql DB)
 
+to set up the rest.
+
+###Live demo at https://www.gtl.cybik.sk
+
+test customer:
+email=petersagan@ucn.dk, passwd=petertest
+
+test librarian:
+email=rockybalboa@ucn.dk, passwd=rockytest
