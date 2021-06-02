@@ -127,7 +127,7 @@ def enable_customer(ssn: str) -> Response:
 def fetch_customers_active_rentals(ssn: str) -> Response:
     res = CustomResponse(data=[])
     try:
-        active_loans = db.session.query(Loan).filter(Loan.customer_ssn == ssn, Loan.returned_at is None).all()
+        active_loans = db.session.query(Loan).filter(Loan.customer_ssn == ssn, Loan.returned_at == None).order_by(Loan.loaned_at.desc()).all()
         res.set_data(list(map(lambda loan: loan.get_relaxed_view(), active_loans)))
     except IntegrityError as e:
         res.set_error(Config.UNHANDLED_EXCEPTION_MESSAGE)

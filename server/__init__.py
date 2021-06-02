@@ -30,6 +30,7 @@ def create_app(config_class=Config):
 
     from server.search.routes import search
     from server.book.routes import books
+    from server.loan.routes import loans
     from server.customers.routes import customers
     from server.users.routes import users, users_unsecure
     from server.main.routes import main, main_unsecure
@@ -37,6 +38,7 @@ def create_app(config_class=Config):
 
     app.register_blueprint(search)
     app.register_blueprint(books)
+    app.register_blueprint(loans)
     app.register_blueprint(customers)
     app.register_blueprint(users)
     app.register_blueprint(users_unsecure)

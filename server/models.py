@@ -575,6 +575,9 @@ class Loan(Base):
         self.loaned_at = loaned_at
         self.returned_at = returned_at
 
+        if self.loaned_at is None:
+            self.loaned_at = datetime.now()
+
     def __repr__(self):
         return f"Loan(book='{self.book_isbn}' customer='{self.customer_ssn}' issued_by='{self.issued_by}'" \
                f" ({self.loaned_at} - {self.returned_at})"
@@ -590,3 +593,6 @@ class Loan(Base):
             'loaned_at': self.loaned_at,
             'returned_at': self.returned_at,
         }
+
+    def close(self):
+        self.returned_at = datetime.now()
